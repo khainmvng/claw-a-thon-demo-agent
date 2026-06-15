@@ -1,0 +1,21 @@
+# Speech-to-Text Transcript
+# Generated   : 2026-06-15 18:04:33
+# Whisper     : base
+# Language    : vi
+# Diarization : enabled
+
+[Speaker 2]  00:01:00.00
+vì quan trí tiêu của một xíu 2 thì không biết là các trách đêm đã bao giờ em nghe đừng kấy đứng không để nó
+tạch sau trào bóp, hay là cũng dụng chưa?
+Đi thôi, anh có dụng không?
+Đi thôi, anh bộ, đừng kể cái bảo, cái tạch em đẹp vào, của ông đất nè
+Đừng giao và đi, còn xa lúc phải luôn, là em đã từng tím hiểu đúng rồi
+
+[Speaker 1]  00:01:23.00
+nhưng mà không đừng kể thật bằng cái waff
+
+[Speaker 2]  00:01:55.00
+bây giờ không vẫn sẽ chẳng dịt một cái thankful, rồi đó mình còn x có malle sinking voice không?
+
+[Speaker 1]  00:03:17.00
+Bilden' là bạn xa nghiệm ra

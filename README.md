@@ -1,21 +1,29 @@
-# interview-qna-agent
+# speech-to-text-agent
 
-A GreenNode AgentBase agent.
+A GreenNode AgentBase agent that transcribes audio to text with **speaker diarization** using **Whisper** + **pyannote.audio**.
+
+Upload an audio file → get a `.txt` transcript with timestamps and `[Speaker N]` labels.
+
+## Features
+
+- Speech-to-text with [openai-whisper](https://github.com/openai/whisper)
+- Speaker diarization (who spoke when) with [pyannote.audio](https://github.com/pyannote/pyannote-audio)
+- Web UI: drag-and-drop upload, realtime progress (SSE), transcript preview, download `.txt`
+- JSON API endpoint for programmatic use
+- Automatic cleanup of cross-language hallucination characters
 
 ## Prerequisites
 
 - Python 3.10+
-- A GreenNode IAM Service Account ([create one here](https://iam.console.vngcloud.vn/service-accounts))
+- `ffmpeg` (required by Whisper to decode audio): `brew install ffmpeg` (macOS) / `apt-get install ffmpeg` (Linux)
+- A HuggingFace token with access to the pyannote gated models (see below) — required for speaker diarization
+- A GreenNode IAM Service Account ([create one here](https://iam.console.vngcloud.vn/service-accounts)) — only for deployment
 
 ## Setup
 
 1. Create and activate a virtual environment:
    ```bash
-   # macOS/Linux:
    python3 -m venv venv && source venv/bin/activate
-
-   # Windows (PowerShell):
-   python -m venv venv; venv\Scripts\Activate.ps1
    ```
 
 2. Install dependencies:
@@ -23,37 +31,23 @@ A GreenNode AgentBase agent.
    pip install -r requirements.txt
    ```
 
-3. Configure credentials for **local development** (choose one method):
-
-   **Option A** - Environment variables:
+3. Configure environment:
    ```bash
    cp .env.example .env
-   # Edit .env with your credentials
+   # Edit .env:
+   #   WHISPER_MODEL=medium          # tiny | base | small | medium | large
+   #   HUGGINGFACE_TOKEN=hf_xxx      # required for speaker diarization
    ```
 
-   **Option B** - Config file (already created):
-   Edit `.greennode.json` with your `client_id` and `client_secret` from your IAM Service Account.
+### HuggingFace token (for speaker diarization)
 
-   > **Note**: When deployed on AgentBase Runtime, the IAM service account and Agent Identity are managed by the runtime system and automatically available to the SDK — no manual credential configuration needed in the container.
+The pyannote pipeline depends on 3 **gated** models. Log in to HuggingFace with the account that owns your token and accept the license on each (click "Agree and access repository"):
 
-4. (Optional, for local dev) Create an Agent Identity at https://aiplatform.console.vngcloud.vn/access-control and set `agent_identity` in `.greennode.json` or `GREENNODE_AGENT_IDENTITY` env var. On AgentBase Runtime, this is managed automatically by the runtime system.
+1. https://huggingface.co/pyannote/segmentation-3.0
+2. https://huggingface.co/pyannote/speaker-diarization-3.1
+3. https://huggingface.co/pyannote/speaker-diarization-community-1
 
-## Configure LLM
-
-This project uses any OpenAI-compatible LLM provider. Set the following in `.env`:
-
-```
-LLM_API_KEY=your-api-key
-LLM_BASE_URL=your-provider-base-url
-LLM_MODEL=your-model-name
-```
-
-**Provider examples:**
-- **GreenNode AIP**: Use `/agentbase-llm` to get an API key. Set `LLM_BASE_URL=https://maas-llm-aiplatform-hcm.api.vngcloud.vn/v1`
-- **OpenAI**: Set `LLM_BASE_URL=https://api.openai.com/v1`, model e.g. `gpt-4o`
-- **Ollama** (local): Set `LLM_BASE_URL=http://localhost:11434/v1` (no key needed)
-
-**Production**: Use `/agentbase-identity` to store your API key on the platform and inject it at runtime.
+Without a token the agent still transcribes (with timestamps) but won't label speakers.
 
 ## Run Locally
 
@@ -61,36 +55,45 @@ LLM_MODEL=your-model-name
 python3 main.py
 ```
 
-The agent starts on `http://127.0.0.1:8080`.
+The agent preloads the models, then starts on `http://0.0.0.0:8080`. Open it in a browser and upload an audio file.
 
-Test it:
+### JSON API
+
 ```bash
 curl -X POST http://127.0.0.1:8080/invocations \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello, agent!"}'
+  -d '{"audio_b64": "<base64-encoded-audio>", "filename": "audio.mp3"}'
 ```
 
-Health check:
-```bash
-curl http://127.0.0.1:8080/health
+## Output format
+
+```
+# Speech-to-Text Transcript
+# Generated   : 2026-06-15 18:04:33
+# Whisper     : medium
+# Language    : vi
+# Diarization : enabled
+
+[Speaker 1]  00:01:00.00
+...
+
+[Speaker 2]  00:01:23.00
+...
 ```
 
 ## Deploy to AgentBase Runtime
 
-1. Build and push your Docker image (or use `/agentbase-deploy` skill)
-2. Create a Runtime at https://aiplatform.console.vngcloud.vn/agent-runtime?tab=runtime
-3. Create an Endpoint pointing to your Runtime
+1. Build and push the Docker image (the `Dockerfile` already installs `ffmpeg`) — or use the `/agentbase-deploy` skill
+2. Create a Runtime and Endpoint at https://aiplatform.console.vngcloud.vn/agent-runtime
+3. Set `WHISPER_MODEL` and `HUGGINGFACE_TOKEN` as runtime env vars
 
-See the [AgentBase Console](https://aiplatform.console.vngcloud.vn) to manage runtimes, identities, and memory.
-
-## Add Conversation Memory (Optional)
-
-When you need conversation history or long-term memory, use `/agentbase-memory` to set up AgentBase Memory and integrate it with your agent.
+> Note: GreenNode runtimes are CPU-only. Whisper on CPU is slow; consider switching to `faster-whisper` (see `HANDOFF.md`) for ~4x speedup and lower memory.
 
 ## Project Structure
 
-- `main.py` - Agent entrypoint with handler and health check
-- `Dockerfile` - Container image definition
-- `requirements.txt` - Python dependencies
-- `.greennode.json` - AgentBase configuration
-- `.env.example` - Environment variable template
+- `main.py` — backend: model loading, transcription, diarization, SSE streaming, routes
+- `index.html` — web UI
+- `Dockerfile` — container image (python:3.12-slim + ffmpeg + torch CPU)
+- `requirements.txt` — Python dependencies
+- `.env.example` — environment variable template
+- `HANDOFF.md` — developer handoff notes (architecture, gotchas, TODO)

@@ -10,4 +10,4 @@ __pycache__/
 *.credentials.json
 .git/
 .gitignore
-*.md
+README.md
